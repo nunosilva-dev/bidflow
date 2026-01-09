@@ -1,10 +1,6 @@
 package com.nsdev.bidflow.config;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
@@ -12,24 +8,20 @@ import org.redisson.config.Config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 
 /**
- * Central Redis and Jackson configuration.
+ * Central configuration for Redis infrastructure and JSON Serialization.
  *
- * <p>This configuration intentionally uses {@link StringCodec} for Redis
- * communication, treating Redis as a message transport rather than a
- * serialization layer.
+ * <p>This configuration enforces a <b>String-based transport strategy</b> for Redis,
+ * deliberately bypassing Redisson's default object serialization to ensure
+ * robustness in a distributed environment.
  *
- * <p>Key design decisions:
+ * <p><b>Key Architecture Decisions:</b>
  * <ul>
- *   <li>No Jackson default typing</li>
- *   <li>No polymorphic deserialization</li>
- *   <li>Explicit JSON serialization at application boundaries</li>
+ * <li><b>StringCodec:</b> Forces Redisson to treat data as plain text, delegating serialization logic to the application layer.</li>
+ * <li><b>No Polymorphism:</b> Disables default typing to prevent {@code InvalidTypeIdException} across service restarts or version mismatches.</li>
+ * <li><b>Explicit Mapping:</b> Centralizes JSON rules in a custom {@link ObjectMapper}.</li>
  * </ul>
- *
- * <p>This avoids common issues with incompatible codecs, class metadata
- * (@class), and cross-service deserialization failures.
  */
 @Configuration
 public class RedisConfig {
@@ -41,39 +33,16 @@ public class RedisConfig {
 
     /**
      * Creates a {@link RedissonClient} configured for single-server Redis
-     * using {@link StringCodec}.
+     * using the {@link StringCodec}.
      *
-     * @return a configured {@link RedissonClient}
+     * @return a configured {@link RedissonClient} instance.
      */
     @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
         Config config = new Config();
         config.useSingleServer().setAddress("redis://" + redisHost + ":" + redisPort);
+        // Enforce String-only communication to avoid ClassCast/TypeID issues
         config.setCodec(StringCodec.INSTANCE);
         return Redisson.create(config);
-    }
-
-    /**
-     * Primary {@link ObjectMapper} used across the application.
-     *
-     * <p>Configured for:
-     * <ul>
-     *   <li>Java time support</li>
-     *   <li>ISO-8601 date serialization</li>
-     *   <li>Graceful handling of unknown fields</li>
-     *   <li>Exclusion of null values</li>
-     * </ul>
-     *
-     * @return a customized {@link ObjectMapper}
-     */
-    @Bean
-    @Primary
-    public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-        mapper.setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL);
-        return mapper;
     }
 }

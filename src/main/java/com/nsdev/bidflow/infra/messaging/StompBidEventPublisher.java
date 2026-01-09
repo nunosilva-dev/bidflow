@@ -12,21 +12,17 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
 
 /**
- * Publishes bid-related domain events to Redis using Pub/Sub.
+ * Publishes bid-related domain events to the Redis Cluster using Pub/Sub.
  *
- * <p>This implementation serializes {@link BidNotification} objects explicitly
- * into JSON strings and publishes them using Redisson {@link RTopic} with
- * {@link org.redisson.client.codec.StringCodec}.
+ * <p>This implementation explicitly serializes {@link BidNotification} objects
+ * into JSON strings before publishing via Redisson's {@link RTopic}.
  *
- * <p>Design rationale:
+ * <p><b>Design Rationale:</b>
  * <ul>
- *   <li>Avoids Jackson polymorphic typing issues (@class)</li>
- *   <li>Ensures compatibility across services and versions</li>
- *   <li>Uses Redis purely as a transport layer</li>
+ * <li><b>Decoupling:</b> Uses Redis strictly as a transport layer, avoiding Redisson's internal codecs.</li>
+ * <li><b>Compatibility:</b> "Plain JSON" strings eliminate polymorphic typing issues (missing {@code @class}) and facilitate consumption by non-Java services.</li>
+ * <li><b>Control:</b> Allows granular configuration of the JSON payload via the application's {@link ObjectMapper}.</li>
  * </ul>
- *
- * <p>The published messages are later consumed by a Redis-to-STOMP relay
- * that forwards them to WebSocket clients.
  */
 @Component
 @RequiredArgsConstructor
@@ -37,17 +33,18 @@ public class StompBidEventPublisher implements BidEventPublisher {
     private final ObjectMapper objectMapper;
 
     /**
-     * Redis Pub/Sub channel used to broadcast bid updates globally.
+     * The dedicated Redis Pub/Sub channel for global bid broadcasts.
      */
     private static final String REDIS_CHANNEL = "bidflow-global-updates";
 
     /**
-     * Publishes a newly placed bid to Redis as a JSON string.
+     * Publishes a newly placed bid to Redis as a serialized JSON string.
      *
-     * <p>The message is serialized manually to ensure full control over the
-     * payload format and to avoid codec-level deserialization issues.
+     * <p>The process handles serialization manually to ensure a schema-compliant
+     * JSON payload. Any serialization errors are logged and suppressed to prevent
+     * impacting the upstream transaction context.
      *
-     * @param bid the domain {@link Bid} that was created
+     * @param bid the persisted domain {@link Bid} entity to be broadcast.
      */
     @Override
     public void publishNewBid(Bid bid) {
@@ -64,7 +61,7 @@ public class StompBidEventPublisher implements BidEventPublisher {
                     jsonPayload
             );
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize bid notification", e);
+            log.error("Failed to serialize bid notification for Auction ID: {}", bid.getAuction().getId(), e);
         }
     }
 }

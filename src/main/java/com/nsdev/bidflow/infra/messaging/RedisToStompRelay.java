@@ -12,21 +12,18 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Bridges Redis Pub/Sub messages to STOMP WebSocket destinations.
+ * Relay component that bridges the Redis Pub/Sub layer to the WebSocket (STOMP) layer.
  *
- * <p>This component listens to Redis messages published as JSON strings,
- * deserializes them into {@link BidNotification} objects, and forwards them
- * to WebSocket clients via {@link SimpMessagingTemplate}.
+ * <p>This component acts as a cluster-aware listener. It subscribes to global
+ * Redis events, deserializes the JSON payloads, and routes them to the
+ * local WebSocket sessions connected to this specific instance.
  *
- * <p>This class acts as an infrastructure boundary:
- * <ul>
- *   <li>Redis handles message distribution</li>
- *   <li>Jackson handles explicit JSON deserialization</li>
- *   <li>STOMP handles client delivery</li>
- * </ul>
- *
- * <p>Using String-based messages ensures compatibility and avoids
- * polymorphic deserialization issues across services.
+ * <p><b>Data Flow:</b>
+ * <ol>
+ * <li>Redis Topic {@code bidflow-global-updates} receives a JSON string.</li>
+ * <li>This relay deserializes it into a {@link BidNotification}.</li>
+ * <li>The notification is forwarded to the STOMP destination {@code /topic/auctions/{id}}.</li>
+ * </ol>
  */
 @Component
 @RequiredArgsConstructor
@@ -37,23 +34,16 @@ public class RedisToStompRelay {
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
 
-    /**
-     * STOMP broker destination prefix (e.g. /topic).
-     */
     @Value("${bidflow.ws.broker-prefix:/topic}")
     private String brokerPrefix;
 
-    /**
-     * Redis Pub/Sub channel used to receive bid updates.
-     */
     private static final String REDIS_CHANNEL = "bidflow-global-updates";
 
     /**
-     * Starts listening to the Redis Pub/Sub channel after bean initialization.
+     * Initializes the Redis listener on startup.
      *
-     * <p>Each received JSON message is deserialized into a
-     * {@link BidNotification} and forwarded to a WebSocket destination
-     * scoped by auction ID.
+     * <p>The listener is fault-tolerant: malformed JSON or deserialization exceptions
+     * are caught and logged, ensuring the subscription remains active for subsequent messages.
      */
     @PostConstruct
     public void startListening() {
@@ -62,13 +52,16 @@ public class RedisToStompRelay {
         topic.addListener(String.class, (channel, jsonPayload) -> {
             try {
                 log.debug("Received JSON from Redis: {}", jsonPayload);
+
                 BidNotification notification = objectMapper.readValue(jsonPayload, BidNotification.class);
+
                 String websocketDestination = String.format("%s/auctions/%d", brokerPrefix, notification.auctionId());
                 messagingTemplate.convertAndSend(websocketDestination, notification);
+
             } catch (Exception e) {
-                log.error("Failed to deserialize or forward message from Redis: {}", jsonPayload, e);
+                log.error("Failed to relay message from Redis. Payload: {}", jsonPayload, e);
             }
         });
-        log.info("Redis Pub/Sub → STOMP relay started. Channel: {}", REDIS_CHANNEL);
+        log.info("Redis Pub/Sub → STOMP Relay active. Listening on channel: {}", REDIS_CHANNEL);
     }
 }

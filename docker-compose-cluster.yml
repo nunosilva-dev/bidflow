@@ -7,33 +7,72 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: bidflow
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d bidflow" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   redis:
     image: redis:7.2-alpine
     container_name: bidflow-redis-cluster
     restart: always
     command: [ "redis-server", "--appendonly", "yes" ]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   app-node-1:
     build: .
     container_name: bidflow-app-node-1
     restart: on-failure
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/bidflow
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 20000
 
   app-node-2:
     build: .
     container_name: bidflow-app-node-2
     restart: on-failure
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/bidflow
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_DATA_REDIS_HOST: redis
+
+  app-node-3:
+    build: .
+    container_name: bidflow-app-node-3
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/bidflow
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
       SPRING_DATA_REDIS_HOST: redis
 
   nginx-lb:
@@ -47,3 +86,4 @@ services:
     depends_on:
       - app-node-1
       - app-node-2
+      - app-node-3

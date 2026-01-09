@@ -3,6 +3,30 @@ import http from 'k6/http';
 import {check, sleep} from 'k6';
 import {randomIntBetween} from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
 
+const TARGET = __ENV.TARGET || 'local';
+
+const ENV_CONFIG = {
+    local: {
+        name: 'Local Dev (Single Node)',
+        httpBase: 'http://localhost:8080/bidflow',
+        wsBase: 'ws://localhost:8080/bidflow/ws'
+    },
+    cluster: {
+        name: 'Docker Cluster (Nginx LB)',
+        httpBase: 'http://localhost:80/bidflow',
+        wsBase: 'ws://localhost:80/bidflow/ws'
+    }
+};
+
+const currentEnv = ENV_CONFIG[TARGET];
+
+if (!currentEnv) {
+    throw new Error(`Unknown environment: ${TARGET}. Use 'local' or 'cluster'.`);
+}
+
+const HTTP_URL = currentEnv.httpBase;
+const WS_URL = `${currentEnv.wsBase}/websocket`;
+
 export const options = {
     stages: [
         {duration: '5s', target: 100},   // Warm-up
@@ -11,16 +35,16 @@ export const options = {
     ],
 };
 
-const HTTP_BASE_URL = 'http://localhost:8080/bidflow';
-const WS_BASE_URL = 'ws://localhost:8080/bidflow/ws';
-const WS_URL = `${WS_BASE_URL}/websocket`;
-
 export function setup() {
-    const res = http.post(`${HTTP_BASE_URL}/test/reset`);
-    if (res.status !== 200) {
-        console.error(`Falha no reset DB: ${res.status}`);
+    console.log(`🚀 Starting test in environment: [${currentEnv.name}]`);
+    console.log(`📡 HTTP: ${HTTP_URL} | WS: ${WS_URL}`);
+
+    const res = http.post(`${HTTP_URL}/test/reset`);
+
+    if (res.status === 200) {
+        console.log('✅ DB reset successfully.');
     } else {
-        console.log('✅ DB resetado com sucesso.');
+        console.error(`❌ Error on DB reset (${res.status}): ${res.body}`);
     }
 }
 
