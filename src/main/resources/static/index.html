@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BidFlow Real-Time Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .price {
+            font-size: 2em;
+            color: #2ecc71;
+            font-weight: bold;
+        }
+
+        .log {
+            background: #f4f4f4;
+            padding: 10px;
+            height: 200px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            font-family: monospace;
+        }
+
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        input {
+            padding: 10px;
+            width: 150px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>BidFlow Monitor</h1>
+
+<div id="status">Connecting...</div>
+
+<div class="card">
+    <h2 id="auctionTitle">Loading Auction...</h2>
+    <p>Current Price: <span id="currentPrice" class="price">---</span></p>
+    <p>Auction ID: <span id="auctionId">1</span></p>
+
+    <hr>
+
+    <div>
+        <label>User: <input type="text" id="username" value="user1"></label>
+        <label>Bid Amount: <input type="number" id="bidAmount" step="10"></label>
+        <button onclick="placeBid()">Place Bid</button>
+    </div>
+    <p style="color: red" id="errorMsg"></p>
+</div>
+
+<h3>Live Event Log</h3>
+<div class="log" id="eventLog"></div>
+
+<script>
+    const AUCTION_ID = 1; // Assuming the ID from DataSeeder
+    const SOCKET_URL = '/bidflow/ws';
+
+    let stompClient = null;
+
+    function connect() {
+        const socket = new SockJS(SOCKET_URL);
+        stompClient = Stomp.over(socket);
+
+        stompClient.debug = null;
+
+        stompClient.connect({}, function (frame) {
+            document.getElementById('status').innerText = 'Connected: ' + frame;
+            document.getElementById('status').style.color = 'green';
+            console.log('Connected: ' + frame);
+
+            stompClient.subscribe('/topic/auctions/' + AUCTION_ID, function (message) {
+                const body = JSON.parse(message.body);
+                showBid(body);
+            });
+
+            stompClient.subscribe('/user/queue/errors', function (message) {
+                const body = JSON.parse(message.body);
+                showError(body.message);
+            });
+
+            fetch('/bidflow/auctions/' + AUCTION_ID)
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('auctionTitle').innerText = data.title;
+                    document.getElementById('currentPrice').innerText = formatMoney(data.currentPrice);
+                    document.getElementById('bidAmount').value = data.currentPrice + 10;
+                });
+
+        }, function (error) {
+            document.getElementById('status').innerText = 'Connection Error: ' + error;
+            document.getElementById('status').style.color = 'red';
+        });
+    }
+
+    function placeBid() {
+        const amount = parseFloat(document.getElementById('bidAmount').value);
+        const user = document.getElementById('username').value;
+        document.getElementById('errorMsg').innerText = '';
+
+        const bidRequest = {
+            auctionId: AUCTION_ID,
+            bidderUsername: user,
+            amount: amount
+        };
+
+        // Send to /app/bid (Matches @MessageMapping)
+        stompClient.send("/app/bid", {}, JSON.stringify(bidRequest));
+        logEvent(`Sent bid: ${amount} by ${user}`);
+    }
+
+    function showBid(notification) {
+        document.getElementById('currentPrice').innerText = formatMoney(notification.amount);
+
+        document.getElementById('bidAmount').value = notification.amount + 10;
+
+        const priceEl = document.getElementById('currentPrice');
+        priceEl.style.color = 'red';
+        setTimeout(() => priceEl.style.color = '#2ecc71', 500);
+
+        logEvent(`🔥 NEW BID! ${notification.bidderUsername} bid ${formatMoney(notification.amount)}`);
+    }
+
+    function showError(msg) {
+        document.getElementById('errorMsg').innerText = msg;
+        logEvent(`❌ Error: ${msg}`);
+    }
+
+    function logEvent(text) {
+        const div = document.getElementById('eventLog');
+        div.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${text}</div>` + div.innerHTML;
+    }
+
+    function formatMoney(amount) {
+        return new Intl.NumberFormat('en-US', {style: 'currency', currency: 'USD'}).format(amount);
+    }
+
+    connect();
+</script>
+</body>
+</html>
