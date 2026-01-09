@@ -20,7 +20,6 @@ import java.time.LocalDateTime;
 public class BidWebSocketController {
 
     private final BidService bidService;
-
     /**
      * Entry point for WebSocket bids.
      * Client sends STOMP SEND to: /app/bid
@@ -30,7 +29,6 @@ public class BidWebSocketController {
         log.debug("Received WebSocket bid from user: {}", principal != null ? principal.getName() : "Anonymous");
         bidService.placeBid(request);
     }
-
     /**
      * Specific WebSockets exception handler.
      */

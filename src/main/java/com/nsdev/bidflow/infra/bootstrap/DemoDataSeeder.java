@@ -17,8 +17,6 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-// Optional: Remove @Profile if you want this to run in Docker Cluster too.
-// Ideally, we keep it for 'dev' or 'default' profiles.
 @Profile("!prod")
 public class DemoDataSeeder implements CommandLineRunner {
 
