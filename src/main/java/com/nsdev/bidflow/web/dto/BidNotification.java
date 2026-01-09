@@ -14,7 +14,7 @@ public record BidNotification(
     public static BidNotification from(Bid bid) {
         return new BidNotification(
                 bid.getAuction().getId(),
-                bid.getBidderUsername(), // Em produção, aqui mascaríamos o nome (ex: "Use***")
+                bid.getBidderUsername(),
                 bid.getAmount(),
                 bid.getCreatedAt()
         );
