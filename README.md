@@ -17,11 +17,11 @@ is mandatory.
 ```mermaid
 graph TD
 Client[Clients / k6 Load Tester] -->|HTTP & WS| LB[Nginx Load Balancer]
-
+    
     subgraph "Application Cluster"
-        LB -->|Round Robin + Sticky| Node1[App Node 1]
-        LB -->|Round Robin + Sticky| Node2[App Node 2]
-        LB -->|Round Robin + Sticky| Node3[App Node 3]
+        LB -->|IP Hash / Sticky| Node1[App Node 1]
+        LB -->|IP Hash / Sticky| Node2[App Node 2]
+        LB -->|IP Hash / Sticky| Node3[App Node 3]
     end
     
     subgraph "Data & Coordination Layer"
