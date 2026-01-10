@@ -11,9 +11,9 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.nsdev.bidflow</groupId>
+    <groupId>com.nsdev</groupId>
     <artifactId>bidflow</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>BidFlow</name>
     <description>High Concurrency Auction System using Virtual Threads and Distributed Locks</description>
 
